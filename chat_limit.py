@@ -1,5 +1,3 @@
-# encoding=utf8
-
 import os
 import sys
 
@@ -7,18 +5,18 @@ import json
 import struct
 import datetime
 
-
+sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.insert(0,'/home/zheng.cheng/')
 from pyDes import *
 import pyspark.sql.functions as func
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, LongType, ShortType
 from pyspark.sql.window import Window
+from contrib.dataregistry import *
 
 DATETIME_FORMAT_PARSER = "%Y%m%d-%H%M%S"
 DATETIME_FORMAT_PRINTER = "%Y-%m-%d %H:%M:%S.%f"
 
-m = 0
 def parse_uid(user_id):
     raw = struct.pack("!Q", user_id)
     key = "\x01\x09\x09\x00\x00\x07\x01\x03"
@@ -72,6 +70,7 @@ def parse_message_content(raw_message):
     return ret
 
 def parse_call_flow(line):
+    #line = line.encode('utf-8').strip()
     i = line.find("{")
     j = line.rfind("}")
     info = line[:i]
@@ -80,22 +79,10 @@ def parse_call_flow(line):
     print(split_items)
     unformat_time = split_items[0]
     sender = split_items[1]
-    result = {
-        'group_id': None,
-        'sender': 0,
-        'receiver': 0,
-        'send_time': None,
-    }
-    ret = {
-        'msg_type': None,
-        'msg_id': None ,
-        'content': None,
-        'duration': None
-    }
-    if sender =="sever":
+    print(info)
+    if sender == u'server':
         print("sender ==sever")
-        result.update(ret)
-        return result
+        raise ValueError('invalid record: %s' % line)
     else:
         message_info = parse_message_content(original_message)
         receiver = split_items[2]
@@ -109,18 +96,18 @@ def parse_call_flow(line):
             'send_time':send_time,
         }
         result.update(message_info)
-        return  result
+        return result
 
 def process(parser, line):
+   #return [parser(line), ]
     try:
         return [parser(line), ]
     except:
         print("exception!!!!!!!!!!")
-        print(line)
         return []
 
 
-def run_with_date(date) :
+def run(date) :
     spark = SparkSession.builder \
         .appName("DialerChatSink") \
         .config("spark.hadoop.dfs.replication", 1) \
@@ -153,24 +140,20 @@ def run_with_date(date) :
     frame = spark.createDataFrame(records, schema)
     frame.write.mode("overwrite").parquet("/user/drill/zhengcheng/temp_data_chat_{}/".format(date))
 
+def update():
+    d = datetime.datetime.today()
+
 if __name__ == '__main__':
-    date = '20170713'
-    run_with_date(date)
-
-# log_txt = sc.textFile('/user/drill/almark/chat_limit/20170713/chatlimit.8.20170713.log')
-# line = log_txt.take(100)
-# line_single = line[41]
-
-
-# import os
-# import sys
-# import json
-# import struct
-# import datetime
-# with open('sample_voice') as f:
-#     line = f.readline()
-
-i = line.find("{")
-j = line.rfind("}")
-raw_message = line[i:j+1]
-
+# date = '20170713'
+#   run_with_date(date)
+#   date = '20170714'
+#   run_with_date(date)
+    date = '20170715'
+    run(date)
+if __name__ == '__main__':
+    if len(sys.argv) >= 2:
+        date_string = sys.argv[1]
+        date_ = datetime.datetime.strptime(date_string, '%Y%m%d')
+        run(date_)
+    else:
+        update()
